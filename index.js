@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const app = express();
 require('dotenv').config();
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 const port = process.env.PORT || 3000;
 
@@ -29,6 +29,51 @@ async function run() {
 
     const db = client.db("zapShiftDB");
     const parcelsCollection = db.collection("parcels");
+    const usersCollection = db.collection("users"); // 👈 Users Collection যোগ করা হলো
+
+    // ==========================================
+    // 👤 USERS RELATED APIS
+    // ==========================================
+
+    // 1. Create User in Database (Avoid duplicate user registration)
+    app.post('/users', async (req, res) => {
+      const user = req.body;
+      
+      // চেক করা ইউজার আগে থেকেই ডাটাবেজে আছে কি না
+      const query = { email: user.email };
+      const existingUser = await usersCollection.findOne(query);
+
+      if (existingUser) {
+        return res.send({ message: 'User already exists in database', insertedId: null });
+      }
+
+      const result = await usersCollection.insertOne(user);
+      res.send(result);
+    });
+
+    // 2. Get All Users or single user by email
+    app.get('/users', async (req, res) => {
+      const email = req.query.email;
+      let query = {};
+      if (email) {
+        query = { email: email };
+      }
+      const result = await usersCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    // 3. Get User Role (e.g., admin, user, deliveryman)
+    app.get('/users/role/:email', async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      res.send({ role: user?.role || 'user' });
+    });
+
+
+    // ==========================================
+    // 📦 PARCELS RELATED APIS
+    // ==========================================
 
     // Parcels API - Get all parcels or filter by email
     app.get('/parcels', async (req, res) => {
