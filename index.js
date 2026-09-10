@@ -1,113 +1,126 @@
 const express = require('express');
 const cors = require('cors');
-const app = express();
+const { PrismaClient } = require('@prisma/client');
 require('dotenv').config();
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
+const app = express();
+const prisma = new PrismaClient();
 const port = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json());
 app.use(cors());
 
-// Dynamic Connection URI using Environment Variables
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.s52ddrv.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+// ==========================================
+// 👤 USERS APIS
+// ==========================================
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
-const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
+// 1. Create User
+app.post('/users', async (req, res) => {
+  try {
+    const { name, email, photoURL, role } = req.body;
+
+    if (!email) {
+      return res.status(400).send({ error: 'Email is required' });
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existingUser) {
+      return res.send({ message: 'User already exists in database', insertedId: null });
+    }
+
+    const newUser = await prisma.user.create({
+      data: {
+        name,
+        email,
+        photoURL,
+        role: role || 'user',
+      },
+    });
+
+    res.send({ insertedId: newUser.id, ...newUser });
+  } catch (err) {
+    console.error("Error creating user:", err);
+    res.status(500).send({ error: err.message });
   }
 });
 
-async function run() {
+// 2. Get All Users or single user by email
+app.get('/users', async (req, res) => {
   try {
-    // Connect the client to the server
-    await client.connect();
+    const email = req.query.email;
 
-    const db = client.db("zapShiftDB");
-    const parcelsCollection = db.collection("parcels");
-    const usersCollection = db.collection("users"); // 👈 Users Collection যোগ করা হলো
+    if (email) {
+      const users = await prisma.user.findMany({
+        where: { email },
+      });
+      return res.send(users);
+    }
 
-    // ==========================================
-    // 👤 USERS RELATED APIS
-    // ==========================================
-
-    // 1. Create User in Database (Avoid duplicate user registration)
-    app.post('/users', async (req, res) => {
-      const user = req.body;
-      
-      // চেক করা ইউজার আগে থেকেই ডাটাবেজে আছে কি না
-      const query = { email: user.email };
-      const existingUser = await usersCollection.findOne(query);
-
-      if (existingUser) {
-        return res.send({ message: 'User already exists in database', insertedId: null });
-      }
-
-      const result = await usersCollection.insertOne(user);
-      res.send(result);
-    });
-
-    // 2. Get All Users or single user by email
-    app.get('/users', async (req, res) => {
-      const email = req.query.email;
-      let query = {};
-      if (email) {
-        query = { email: email };
-      }
-      const result = await usersCollection.find(query).toArray();
-      res.send(result);
-    });
-
-    // 3. Get User Role (e.g., admin, user, deliveryman)
-    app.get('/users/role/:email', async (req, res) => {
-      const email = req.params.email;
-      const query = { email: email };
-      const user = await usersCollection.findOne(query);
-      res.send({ role: user?.role || 'user' });
-    });
-
-
-    // ==========================================
-    // 📦 PARCELS RELATED APIS
-    // ==========================================
-
-    // Parcels API - Get all parcels or filter by email
-    app.get('/parcels', async (req, res) => {
-      const query = {};
-      const { email } = req.query;
-
-      if (email) {
-        query.senderEmail = email;
-      }
-
-      const cursor = parcelsCollection.find(query);
-      const result = await cursor.toArray();
-      res.send(result);
-    });
-
-    // Parcels API - Create a new parcel
-    app.post('/parcels', async (req, res) => {
-      const parcel = req.body;
-      const result = await parcelsCollection.insertOne(parcel);
-      res.send(result);
-    });
-
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
-  } catch (error) {
-    console.error("MongoDB Connection Error:", error);
+    const users = await prisma.user.findMany();
+    res.send(users);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
   }
-}
+});
 
-run().catch(console.dir);
+// 3. Get User Role
+app.get('/users/role/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
 
+    res.send({ role: user?.role || 'user' });
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// ==========================================
+// 📦 PARCELS APIS
+// ==========================================
+
+// 1. Get All Parcels or filter by senderEmail
+app.get('/parcels', async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    if (email) {
+      const parcels = await prisma.parcel.findMany({
+        where: { senderEmail: email },
+      });
+      return res.send(parcels);
+    }
+
+    const parcels = await prisma.parcel.findMany();
+    res.send(parcels);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// 2. Create a new Parcel
+app.post('/parcels', async (req, res) => {
+  try {
+    const parcelData = req.body;
+    const newParcel = await prisma.parcel.create({
+      data: parcelData,
+    });
+
+    res.send({ insertedId: newParcel.id, ...newParcel });
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// Root Route
 app.get('/', (req, res) => {
-  res.send('Zap is shifting!');
+  res.send('Zap is shifting with Prisma!');
 });
 
 app.listen(port, () => {
