@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 const { PrismaClient } = require('@prisma/client');
 require('dotenv').config();
 
@@ -7,9 +9,78 @@ const app = express();
 const prisma = new PrismaClient();
 const port = process.env.PORT || 3000;
 
+// 1. CORS Configuration (Fixes preflight and credentials issue)
+app.use(
+  cors({
+    origin: [
+      'http://localhost:5173',
+      'http://localhost:5174',
+      process.env.CLIENT_URL,
+    ].filter(Boolean),
+    credentials: true,
+  })
+);
+
 // Middleware
 app.use(express.json());
-app.use(cors());
+app.use(cookieParser());
+
+// Verify JWT Middleware
+const verifyToken = (req, res, next) => {
+  const token = req.cookies?.token;
+  if (!token) {
+    return res.status(401).send({ message: 'Unauthorized access' });
+  }
+
+  jwt.verify(
+    token,
+    process.env.ACCESS_TOKEN_SECRET || 'secret_key',
+    (err, decoded) => {
+      if (err) {
+        return res.status(401).send({ message: 'Unauthorized access' });
+      }
+      req.user = decoded;
+      next();
+    }
+  );
+};
+
+// ==========================================
+// 🔑 AUTH / JWT APIS
+// ==========================================
+
+// Issue JWT Token
+app.post('/jwt', async (req, res) => {
+  try {
+    const user = req.body;
+    const token = jwt.sign(
+      user,
+      process.env.ACCESS_TOKEN_SECRET || 'secret_key',
+      { expiresIn: '7d' }
+    );
+
+    res
+      .cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+      })
+      .send({ success: true });
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// Clear Cookie on Logout
+app.post('/logout', (req, res) => {
+  res
+    .clearCookie('token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+    })
+    .send({ success: true });
+});
 
 // ==========================================
 // 👤 USERS APIS
@@ -29,7 +100,10 @@ app.post('/users', async (req, res) => {
     });
 
     if (existingUser) {
-      return res.send({ message: 'User already exists in database', insertedId: null });
+      return res.send({
+        message: 'User already exists in database',
+        insertedId: null,
+      });
     }
 
     const newUser = await prisma.user.create({
@@ -43,7 +117,7 @@ app.post('/users', async (req, res) => {
 
     res.send({ insertedId: newUser.id, ...newUser });
   } catch (err) {
-    console.error("Error creating user:", err);
+    console.error('Error creating user:', err);
     res.status(500).send({ error: err.message });
   }
 });
@@ -93,11 +167,14 @@ app.get('/parcels', async (req, res) => {
     if (email) {
       const parcels = await prisma.parcel.findMany({
         where: { senderEmail: email },
+        orderBy: { bookingDate: 'desc' },
       });
       return res.send(parcels);
     }
 
-    const parcels = await prisma.parcel.findMany();
+    const parcels = await prisma.parcel.findMany({
+      orderBy: { bookingDate: 'desc' },
+    });
     res.send(parcels);
   } catch (err) {
     res.status(500).send({ error: err.message });
@@ -108,12 +185,33 @@ app.get('/parcels', async (req, res) => {
 app.post('/parcels', async (req, res) => {
   try {
     const parcelData = req.body;
+
     const newParcel = await prisma.parcel.create({
-      data: parcelData,
+      data: {
+        senderName: parcelData.senderName,
+        senderEmail: parcelData.senderEmail,
+        senderPhone: parcelData.senderPhone || parcelData.senderPhoneNo,
+        senderAddress: parcelData.senderAddress,
+
+        receiverName: parcelData.receiverName,
+        receiverPhone:
+          parcelData.receiverPhone || parcelData.receiverContactNo,
+        receiverAddress: parcelData.receiverAddress,
+
+        parcelType: parcelData.parcelType,
+        parcelWeight: parseFloat(parcelData.parcelWeight) || 0,
+        cost: parseFloat(parcelData.cost) || 0,
+
+        status: parcelData.status || 'pending',
+        bookingDate: parcelData.bookingDate
+          ? new Date(parcelData.bookingDate)
+          : new Date(),
+      },
     });
 
     res.send({ insertedId: newParcel.id, ...newParcel });
   } catch (err) {
+    console.error('Error creating parcel:', err);
     res.status(500).send({ error: err.message });
   }
 });

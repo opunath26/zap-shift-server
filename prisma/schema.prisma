@@ -17,12 +17,23 @@ model User {
   createdAt DateTime @default(now())
 }
 
-// 📦 Parcel Model
+// 📦 Parcel Model (Updated for Express Backend Payload)
 model Parcel {
-  id           String   @id @default(auto()) @map("_id") @db.ObjectId
-  senderEmail  String
-  receiverName String?
-  price        Float?
-  status       String   @default("pending")
-  createdAt    DateTime @default(now())
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  senderName      String?
+  senderEmail     String
+  senderPhone     String?
+  senderAddress   String?
+
+  receiverName    String?
+  receiverPhone   String?
+  receiverAddress String?
+
+  parcelType      String?
+  parcelWeight    Float?
+  cost            Float?
+  status          String   @default("pending")
+  
+  bookingDate     DateTime @default(now())
+  createdAt       DateTime @default(now())
 }
