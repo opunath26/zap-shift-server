@@ -9,7 +9,7 @@ const app = express();
 const prisma = new PrismaClient();
 const port = process.env.PORT || 3000;
 
-// 1. CORS Configuration (Fixes preflight and credentials issue)
+// 1. CORS Configuration
 app.use(
   cors({
     origin: [
@@ -46,7 +46,7 @@ const verifyToken = (req, res, next) => {
 };
 
 // ==========================================
-// 🔑 AUTH / JWT APIS
+//  AUTH / JWT APIS
 // ==========================================
 
 // Issue JWT Token
@@ -83,7 +83,7 @@ app.post('/logout', (req, res) => {
 });
 
 // ==========================================
-// 👤 USERS APIS
+//  USERS APIS
 // ==========================================
 
 // 1. Create User
@@ -155,8 +155,30 @@ app.get('/users/role/:email', async (req, res) => {
   }
 });
 
+// 4. Update User Role
+app.patch('/users/role/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    const { role } = req.body;
+
+    if (!role) {
+      return res.status(400).send({ error: 'Role is required' });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { email },
+      data: { role },
+    });
+
+    res.send(updatedUser);
+  } catch (err) {
+    console.error('Error updating user role:', err);
+    res.status(500).send({ error: err.message });
+  }
+});
+
 // ==========================================
-// 📦 PARCELS APIS
+//  PARCELS APIS
 // ==========================================
 
 // 1. Get All Parcels or filter by senderEmail
