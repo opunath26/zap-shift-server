@@ -14,7 +14,19 @@ model User {
   email     String   @unique
   photoURL  String?
   role      String   @default("user")
+
+  // Rider Specific Fields (Optional)
+  phone     String?
+  nid       String?
+  license   String?
+  region    String?
+  district  String?
+  bikeModel String?
+  bikeRegNo String?
+  about     String?
+
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt @default(now())
 }
 
 // 📦 Parcel Model (Updated for Express Backend Payload)
@@ -33,7 +45,7 @@ model Parcel {
   parcelWeight    Float?
   cost            Float?
   status          String   @default("pending")
-  
+
   bookingDate     DateTime @default(now())
   createdAt       DateTime @default(now())
 }

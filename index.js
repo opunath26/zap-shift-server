@@ -155,19 +155,33 @@ app.get('/users/role/:email', async (req, res) => {
   }
 });
 
-// 4. Update User Role
+// 4. Update User Role & Rider Details
 app.patch('/users/role/:email', async (req, res) => {
   try {
     const { email } = req.params;
-    const { role } = req.body;
+    const { role, riderDetails } = req.body;
 
     if (!role) {
       return res.status(400).send({ error: 'Role is required' });
     }
 
+    const updateData = { role };
+
+    // Attach rider application data if present
+    if (riderDetails) {
+      updateData.phone = riderDetails.phone;
+      updateData.nid = riderDetails.nid;
+      updateData.license = riderDetails.license;
+      updateData.region = riderDetails.region;
+      updateData.district = riderDetails.district;
+      updateData.bikeModel = riderDetails.bikeModel;
+      updateData.bikeRegNo = riderDetails.bikeRegNo;
+      updateData.about = riderDetails.about;
+    }
+
     const updatedUser = await prisma.user.update({
       where: { email },
-      data: { role },
+      data: updateData,
     });
 
     res.send(updatedUser);
